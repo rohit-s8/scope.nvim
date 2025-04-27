@@ -19,10 +19,10 @@ end
 
 function M._setup()
     local group = vim.api.nvim_create_augroup("ScopeAU", {})
+    vim.api.nvim_create_autocmd("TabNew", { group = group, callback = core.on_tab_new })
     vim.api.nvim_create_autocmd("TabEnter", { group = group, callback = core.on_tab_enter })
     vim.api.nvim_create_autocmd("TabLeave", { group = group, callback = core.on_tab_leave })
     vim.api.nvim_create_autocmd("TabClosed", { group = group, callback = core.on_tab_closed })
-    vim.api.nvim_create_autocmd("TabNewEntered", { group = group, callback = core.on_tab_new_entered })
     vim.api.nvim_create_user_command("ScopeSaveState", function()
         core.on_tab_leave()
         core.on_tab_enter()

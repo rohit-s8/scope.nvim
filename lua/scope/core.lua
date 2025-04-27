@@ -10,7 +10,7 @@ local function get_tabnum(tab_id)
   return vim.api.nvim_tabpage_get_number(tab_id)
 end
 
-function M.on_tab_new_entered()
+function M.on_tab_new()
     local tab = get_tabnum()
     table.insert(M.cache, tab, {})
 end
