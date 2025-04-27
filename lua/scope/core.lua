@@ -4,22 +4,27 @@ local config = require("scope.config")
 local M = {}
 
 M.cache = {}
-M.last_tab = 0
+
+local function get_tabnum(tab_id)
+  tab_id = tab_id or 0
+  return vim.api.nvim_tabpage_get_number(tab_id)
+end
 
 function M.on_tab_new_entered()
-    vim.api.nvim_buf_set_option(0, "buflisted", true)
+    local tab = get_tabnum()
+    table.insert(M.cache, tab, {})
 end
 
 function M.on_tab_enter()
     if config.hooks.pre_tab_enter ~= nil then
         config.hooks.pre_tab_enter()
     end
-    local tab = vim.api.nvim_get_current_tabpage()
+    local tab = get_tabnum()
     local buf_nums = M.cache[tab]
     if buf_nums then
         for _, k in pairs(buf_nums) do
             if vim.api.nvim_buf_is_valid(k) then
-                vim.api.nvim_buf_set_option(k, "buflisted", true)
+                vim.bo[k].buflisted = true
             end
         end
     end
@@ -32,30 +37,30 @@ function M.on_tab_leave()
     if config.hooks.pre_tab_leave ~= nil then
         config.hooks.pre_tab_leave()
     end
-    local tab = vim.api.nvim_get_current_tabpage()
+    local tab = get_tabnum()
     local buf_nums = utils.get_valid_buffers()
     M.cache[tab] = buf_nums
     for _, k in pairs(buf_nums) do
-        vim.api.nvim_buf_set_option(k, "buflisted", false)
+        vim.bo[k].buflisted = false
     end
-    M.last_tab = tab
     if config.hooks.post_tab_leave ~= nil then
         config.hooks.post_tab_leave()
     end
 end
 
-function M.on_tab_closed()
+function M.on_tab_closed(data)
     if config.hooks.pre_tab_close ~= nil then
         config.hooks.pre_tab_close()
     end
-    M.cache[M.last_tab] = nil
+    local tab = data.file
+    table.remove(M.cache, tab)
     if config.hooks.post_tab_close ~= nil then
         config.hooks.post_tab_close()
     end
 end
 
 function M.revalidate()
-    local tab = vim.api.nvim_get_current_tabpage()
+    local tab = get_tabnum()
     local buf_nums = utils.get_valid_buffers()
     M.cache[tab] = buf_nums
 end
@@ -81,7 +86,7 @@ end
 ---@return nil
 M.close_buffer = function(opts)
     opts = opts or {}
-    local current_tab = vim.api.nvim_get_current_tabpage()
+    local current_tab = get_tabnum()
     local current_buf = opts.buf or vim.api.nvim_get_current_buf()
 
     -- Ensure the cache is up-to-date
@@ -108,7 +113,7 @@ M.close_buffer = function(opts)
     -- If the buffer exists in other tabs, hide it in the current tab
     if buffer_exists_in_other_tabs then
         if #buffers_in_current_tab > 1 then
-            vim.api.nvim_buf_set_option(current_buf, "buflisted", false)
+            vim.bo[current_buf].buflisted = false
             vim.cmd([[bprev]])
         else
             vim.cmd("tabclose")
@@ -137,8 +142,7 @@ end
 
 function M.move_current_buf(opts)
     -- ensure current buflisted
-    local buflisted = vim.api.nvim_buf_get_option(0, "buflisted")
-    if not buflisted then
+    if not vim.bo.buflisted then
         return
     end
 
@@ -157,10 +161,11 @@ function M.move_current_buf(opts)
     local target_handle = vim.api.nvim_list_tabpages()[target]
 
     if target_handle == nil then
-        vim.api.nvim_err_writeln("Invalid target tab")
+        vim.api.nvim_echo({ "Invalid target tab" }, false, { err = true })
         return
     end
 
+    target_handle = get_tabnum(target_handle)
     M.move_buf(vim.api.nvim_get_current_buf(), target_handle)
 end
 
@@ -169,12 +174,12 @@ function M.move_buf(bufnr, target)
     local target_bufs = M.cache[target] or {}
     target_bufs[#target_bufs + 1] = bufnr
 
-    -- remove current buf from current tab if it is not the last one in the tab
+    -- remove buf from current tab if it is not the last one in the tab
     local buf_nums = utils.get_valid_buffers()
     if #buf_nums > 1 then
-        vim.api.nvim_buf_set_option(bufnr, "buflisted", false)
+        vim.bo[bufnr].buflisted = false
 
-        -- current buf are not in the current tab anymore, so we switch to the previous tab
+        -- current buf are not in the current tab anymore, so we switch to the previous buffer
         if bufnr == vim.api.nvim_get_current_buf() then
             vim.cmd("bprevious")
         end
